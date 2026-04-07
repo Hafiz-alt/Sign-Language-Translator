@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: isl-translator
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free

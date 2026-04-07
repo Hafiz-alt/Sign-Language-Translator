@@ -1,0 +1,10 @@
+# ============================================================
+# ISL Translator — Python Dependencies
+# Install with:  pip install -r requirements.txt
+# ============================================================
+
+tensorflow>=2.10.0        # Deep-learning framework (includes Keras)
+opencv-python-headless>=4.7.0 # OpenCV without GUI dependencies
+numpy>=1.23.0             # Numerical operations
+Pillow>=9.0.0             # Image utilities used by Keras internally
+flask>=2.3.0              # Lightweight web server

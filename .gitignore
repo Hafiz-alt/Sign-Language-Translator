@@ -1,0 +1,17 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Model file (too large for GitHub)
+*.h5
+
+# Dataset (too large for GitHub)
+dataset/
+
+# OS files
+.DS_Store
+Thumbs.db
