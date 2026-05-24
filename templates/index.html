@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- SEO Meta Tags -->
-    <title>ISL Translator — AI-Powered Indian Sign Language Recognition</title>
+    <title>ISL Alphabet Recognizer - Camera-Based Fingerspelling Demo</title>
     <meta name="description"
-        content="Real-time Indian Sign Language to Text &amp; Speech translation powered by MobileNetV2 deep learning." />
+        content="Camera-based Indian Sign Language alphabet recognition powered by MobileNetV2 deep learning." />
 
     <!-- Google Fonts — Inter (modern, clean typeface) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -49,14 +49,14 @@
 
         <!-- Hero content -->
         <div class="hero__content">
-            <p class="hero__tag">🤖&nbsp; Powered by MobileNetV2 &amp; Transfer Learning</p>
+            <p class="hero__tag">🤖&nbsp; Powered by MobileNetV3 &amp; Transfer Learning</p>
             <h1 class="hero__title">
-                <span class="hero__title--gradient">ISL Translator</span>
+                <span class="hero__title--gradient">ISL Alphabet Recognizer</span>
             </h1>
             <p class="hero__subtitle">
-                Real-time Indian Sign Language recognition — translating
-                hand gestures to <strong>text</strong> and <strong>speech</strong>,
-                instantly.
+                Camera-based fingerspelling recognition for the
+                <strong>A-Z alphabet</strong>, with confidence filtering and
+                stable sign confirmation.
             </p>
 
             <!-- CTA button scrolls to the app section -->
@@ -83,9 +83,9 @@
 
             <!-- Section heading -->
             <div class="app-header">
-                <h2 class="app-header__title">Live Translation</h2>
+                <h2 class="app-header__title">Live Fingerspelling</h2>
                 <p class="app-header__desc">
-                    Position your hand inside the guide box and the AI will translate in real time.
+                    Hold a supported alphabet sign inside the guide box until it is confirmed.
                 </p>
             </div>
 
@@ -100,6 +100,9 @@
                         <p class="feed-placeholder__hint">Click the button below to start</p>
                     </div>
                     <video id="videoFeed" class="feed-img hidden" autoplay playsinline muted></video>
+                    <div class="capture-guide hidden" id="captureGuide">
+                        <span>Keep hand(s) inside this box</span>
+                    </div>
                     <!-- Hidden canvas for grabbing frames -->
                     <canvas id="captureCanvas" style="display:none;"></canvas>
                 </div>
@@ -109,7 +112,7 @@
 
                     <!-- Predicted text output -->
                     <div class="panel-card glass-card--inner">
-                        <h3 class="panel-card__label">Translated Text</h3>
+                        <h3 class="panel-card__label">Spelled Text</h3>
                         <div class="text-output" id="textOutput">
                             <span class="text-output__cursor">|</span>
                         </div>
@@ -128,8 +131,9 @@
 
                     <!-- Current prediction card -->
                     <div class="panel-card glass-card--inner">
-                        <h3 class="panel-card__label">Current Prediction</h3>
+                        <h3 class="panel-card__label">Current Candidate</h3>
                         <div class="prediction-display" id="predictionDisplay">—</div>
+                        <p class="prediction-status" id="predictionStatus">Waiting for camera</p>
                     </div>
 
                     <!-- Camera toggle button -->
@@ -142,13 +146,29 @@
                     <button class="btn-secondary" id="clearTextBtn">
                         Clear Text
                     </button>
+                    <div class="edit-actions">
+                        <button class="btn-secondary" id="spaceBtn">Add Space</button>
+                        <button class="btn-secondary" id="backspaceBtn">Backspace</button>
+                    </div>
+                    {% if collection_mode %}
+                    <div class="panel-card glass-card--inner collection-panel">
+                        <h3 class="panel-card__label">Training Collection</h3>
+                        <p>Select the pose currently inside the guide box, then save examples.</p>
+                        <label class="collection-label" for="sampleLabel">Sample label</label>
+                        <select class="collection-select" id="sampleLabel">
+                            <option value="no_sign">No sign / neutral</option>
+                        </select>
+                        <button class="btn-secondary" id="captureSampleBtn">Capture Training Sample</button>
+                        <p id="collectionStatus">No samples captured this session.</p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
         <!-- Footer -->
         <footer class="app-footer">
-            <p>Built with ❤️ using <strong>TensorFlow</strong>, <strong>MobileNetV2</strong> &amp;
+            <p>Built with <strong>ONNX Runtime</strong>, <strong>MobileNetV3</strong> &amp;
                 <strong>Flask</strong>
             </p>
         </footer>
@@ -184,10 +204,24 @@
         const heroCtaBtn = document.getElementById("heroCtaBtn");
 
         let cameraOn = false;     // Camera state flag
-        let pollTimer = null;      // setInterval ID for polling
-        let lastLabel = "";        // Debounce repeated characters
-        let translatedText = "";   // Accumulated translation string
-        let sameCount = 0;         // Counter for repeated same-label polls
+        const captureGuide = document.getElementById("captureGuide");
+        const predictionStatus = document.getElementById("predictionStatus");
+        const spaceBtn = document.getElementById("spaceBtn");
+        const backspaceBtn = document.getElementById("backspaceBtn");
+        const captureSampleBtn = document.getElementById("captureSampleBtn");
+        const sampleLabel = document.getElementById("sampleLabel");
+        const collectionStatus = document.getElementById("collectionStatus");
+
+        const STABLE_FRAMES = 3;
+        const RELEASE_FRAMES = 2;
+        const CAPTURE_SIZE = 224;
+        let pollTimer = null;
+        let requestInFlight = false;
+        let translatedText = "";
+        let candidateLabel = "";
+        let candidateFrames = 0;
+        let releaseFrames = 0;
+        let readyForNextSign = true;
 
         // ── Smooth scroll for the hero CTA ─────────────────────
         heroCtaBtn.addEventListener("click", (e) => {
@@ -205,6 +239,7 @@
                     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
                     videoFeed.srcObject = stream;
                     videoFeed.classList.remove("hidden");
+                    captureGuide.classList.remove("hidden");
                     feedPlaceholder.classList.add("hidden");
                     toggleLabel.textContent = "Disable Camera";
                     toggleIcon.textContent = "🔴";
@@ -213,8 +248,8 @@
                     // Set canvas size when video starts playing
                     videoFeed.onloadedmetadata = () => {
                         if (captureCanvas) {
-                            captureCanvas.width = videoFeed.videoWidth;
-                            captureCanvas.height = videoFeed.videoHeight;
+                            captureCanvas.width = CAPTURE_SIZE;
+                            captureCanvas.height = CAPTURE_SIZE;
                         }
                     };
 
@@ -232,6 +267,7 @@
                 }
                 videoFeed.srcObject = null;
                 videoFeed.classList.add("hidden");
+                captureGuide.classList.add("hidden");
                 feedPlaceholder.classList.remove("hidden");
                 toggleLabel.textContent = "Enable Camera";
                 toggleIcon.textContent = "🎥";
@@ -245,19 +281,55 @@
                 confidenceBar.style.width = "0%";
                 confidenceValue.textContent = "0 %";
                 predictionDisplay.textContent = "—";
+                predictionDisplay.classList.remove("prediction-display--active");
+                predictionStatus.textContent = "Waiting for camera";
+                resetRecognitionState();
             }
         });
 
+        function resetRecognitionState() {
+            candidateLabel = "";
+            candidateFrames = 0;
+            releaseFrames = 0;
+            readyForNextSign = true;
+        }
+
+        function renderText() {
+            textOutput.textContent = translatedText;
+            const cursor = document.createElement("span");
+            cursor.className = "text-output__cursor";
+            cursor.textContent = "|";
+            textOutput.appendChild(cursor);
+        }
+
+        function acceptLetter(label) {
+            translatedText += label.toUpperCase();
+            renderText();
+            speakText(label);
+            readyForNextSign = false;
+            releaseFrames = 0;
+        }
+
+        function captureGuideImage() {
+            if (!captureCanvas || videoFeed.readyState < 2) return null;
+            const cropSize = Math.min(videoFeed.videoWidth, videoFeed.videoHeight) * 0.82;
+            const cropX = (videoFeed.videoWidth - cropSize) / 2;
+            const cropY = (videoFeed.videoHeight - cropSize) / 2;
+            captureCtx.drawImage(
+                videoFeed, cropX, cropY, cropSize, cropSize,
+                0, 0, CAPTURE_SIZE, CAPTURE_SIZE
+            );
+            return captureCanvas.toDataURL("image/jpeg", 0.85);
+        }
+
         // ── Fetch the latest prediction from Flask ─────────────
         async function fetchPrediction() {
-            if (!videoFeed.srcObject || !captureCanvas) return;
+            if (!videoFeed.srcObject || !captureCanvas || requestInFlight || videoFeed.readyState < 2) return;
 
-            // Draw current video frame to canvas
-            captureCtx.drawImage(videoFeed, 0, 0, captureCanvas.width, captureCanvas.height);
-            // Get base64 jpeg
-            const dataURL = captureCanvas.toDataURL("image/jpeg", 0.7);
+            const dataURL = captureGuideImage();
 
             try {
+                requestInFlight = true;
                 const res = await fetch("/predict_frame", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -266,6 +338,7 @@
                 const data = await res.json();
 
                 const label = data.label || "";
+                const candidate = data.candidate || "";
                 const confidence = data.confidence || 0;
 
                 // Update confidence bar
@@ -282,53 +355,107 @@
                 }
 
                 // Update current prediction display
-                if (label) {
-                    predictionDisplay.textContent = label;
-                    predictionDisplay.classList.add("prediction-display--active");
+                if (candidate) {
+                    predictionDisplay.textContent = candidate.toUpperCase();
                 } else {
                     predictionDisplay.textContent = "—";
+                }
+
+                if (data.accepted) {
+                    predictionDisplay.classList.add("prediction-display--active");
+                } else {
                     predictionDisplay.classList.remove("prediction-display--active");
                 }
 
-                // Append to translated text
-                if (label && confidence >= 5) {
-                    if (label !== lastLabel) {
-                        // New letter detected — append immediately
-                        lastLabel = label;
-                        sameCount = 0;
-                        if (confidence >= 85) speakText(label); // Read out loud
-                        translatedText += (label.length === 1) ? label : " " + label + " ";
-                        textOutput.innerHTML =
-                            translatedText +
-                            '<span class="text-output__cursor">|</span>';
-                    } else {
-                        // Same letter held — repeat after ~3 s (6 polls × 500 ms)
-                        sameCount++;
-                        if (sameCount >= 6) {
-                            sameCount = 0;
-                            if (confidence >= 85) speakText(label);
-                            translatedText += (label.length === 1) ? label : " " + label + " ";
-                            textOutput.innerHTML =
-                                translatedText +
-                                '<span class="text-output__cursor">|</span>';
-                        }
+                if (!data.accepted || !label) {
+                    candidateLabel = "";
+                    candidateFrames = 0;
+                    releaseFrames += 1;
+                    if (releaseFrames >= RELEASE_FRAMES) {
+                        readyForNextSign = true;
                     }
+                    predictionStatus.textContent = "No confident sign detected";
+                    return;
+                }
+
+                releaseFrames = 0;
+                if (!readyForNextSign) {
+                    predictionStatus.textContent = "Move to a neutral pose for the next letter";
+                    return;
+                }
+
+                if (candidateLabel === label) {
+                    candidateFrames += 1;
+                } else {
+                    candidateLabel = label;
+                    candidateFrames = 1;
+                }
+
+                if (candidateFrames >= STABLE_FRAMES) {
+                    acceptLetter(label);
+                    candidateFrames = 0;
+                    predictionStatus.textContent = "Letter confirmed";
+                } else {
+                    predictionStatus.textContent = "Hold steady to confirm (" + candidateFrames + "/" + STABLE_FRAMES + ")";
                 }
             } catch (err) {
                 console.error("Prediction fetch error:", err);
+                predictionStatus.textContent = "Prediction unavailable";
+            } finally {
+                requestInFlight = false;
             }
         }
 
         // ── Clear text button ──────────────────────────────────
         clearTextBtn.addEventListener("click", () => {
             translatedText = "";
-            lastLabel = "";
-            textOutput.innerHTML = '<span class="text-output__cursor">|</span>';
+            resetRecognitionState();
+            renderText();
             // Stop speaking if currently doing it
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
             }
         });
+
+        spaceBtn.addEventListener("click", () => {
+            translatedText += " ";
+            renderText();
+        });
+
+        backspaceBtn.addEventListener("click", () => {
+            translatedText = translatedText.slice(0, -1);
+            renderText();
+        });
+
+        if (captureSampleBtn) {
+            const collectedCounts = {};
+            for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+                const option = document.createElement("option");
+                option.value = letter.toLowerCase();
+                option.textContent = letter;
+                sampleLabel.appendChild(option);
+            }
+            captureSampleBtn.addEventListener("click", async () => {
+                if (!cameraOn || !captureCanvas || videoFeed.readyState < 2) {
+                    collectionStatus.textContent = "Enable the camera first.";
+                    return;
+                }
+                const label = sampleLabel.value;
+                const dataURL = captureGuideImage();
+                const response = await fetch("/collect_sample", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ image: dataURL, label: label })
+                });
+                if (response.ok) {
+                    collectedCounts[label] = (collectedCounts[label] || 0) + 1;
+                    collectionStatus.textContent =
+                        collectedCounts[label] + " sample(s) saved for " + label.toUpperCase() + ".";
+                } else {
+                    collectionStatus.textContent = "Could not save the sample.";
+                }
+            });
+        }
     </script>
 
 

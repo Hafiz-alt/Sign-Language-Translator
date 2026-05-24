@@ -11,6 +11,11 @@ __pycache__/
 
 # Dataset (too large for GitHub)
 dataset/
+prepared_dataset/
+background_images/
+*.pt
+confusion_matrix.png
+validation_confusion_matrix.npy
 
 # OS files
 .DS_Store

@@ -379,6 +379,31 @@ body {
     object-fit: cover;
 }
 
+.capture-guide {
+    position: absolute;
+    top: 9%;
+    left: 19%;
+    width: 62%;
+    aspect-ratio: 1;
+    border: 2px dashed rgba(0, 229, 255, 0.8);
+    border-radius: var(--radius-md);
+    pointer-events: none;
+    box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.18);
+}
+
+.capture-guide span {
+    position: absolute;
+    bottom: -34px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: var(--accent-cyan);
+    background: rgba(10, 14, 26, 0.75);
+    font-size: 0.75rem;
+}
+
 /* Placeholder when camera is off */
 .feed-placeholder {
     position: absolute;
@@ -512,6 +537,14 @@ body {
     text-shadow: 0 0 20px rgba(0, 229, 255, 0.3);
 }
 
+.prediction-status {
+    margin-top: 10px;
+    min-height: 22px;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    text-align: center;
+}
+
 
 /* ═══════════════════════════════════════════════════════════
    BUTTONS
@@ -571,6 +604,40 @@ body {
     color: var(--text-primary);
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.20);
+}
+
+.edit-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.collection-panel p {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    margin-bottom: 12px;
+}
+
+.collection-label {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin-bottom: 6px;
+}
+
+.collection-select {
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    font-family: var(--font);
+}
+
+.collection-panel #collectionStatus {
+    margin: 12px 0 0;
+    color: var(--accent-cyan);
 }
 
 

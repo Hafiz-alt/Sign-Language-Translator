@@ -1,0 +1,7 @@
+-r requirements.txt
+matplotlib>=3.7.0
+scikit-learn>=1.2.0
+seaborn>=0.12.0
+onnx>=1.17.0
+# Install CUDA-enabled torch and torchvision separately for local GPU training:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
